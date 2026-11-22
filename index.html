@@ -40,8 +40,9 @@ button{cursor:pointer}button.p{background:var(--ac);color:#111;border:0;font-wei
 
   // Initialize Firebase
   const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-  const db = getDatabase(app);
+  try { getAnalytics(app); } catch (e) {}
+  let db = null;
+  try { db = getDatabase(app); } catch (e) {}
   const MY = 'u_' + Math.random().toString(36).slice(2, 8);
   let chatUnsub = null, roomUnsub = null, joinedPlayers = {};
 
@@ -67,8 +68,8 @@ const app=h=>$('#app').innerHTML=h;
 function tc(){const p=$('#cp');p.style.display=p.style.display=='block'?'none':'block';cu()}
 function cu(){const e=$('#cm2');if(!e)return;e.innerHTML=CH.slice(-40).map(m=>`<div><b>${m.u}:</b> ${m.t}</div>`).join('');e.scrollTop=9e9}
 function say(u,t){CH.push({u,t});cu()}
-function snd(){const i=$('#ci'),t=i.value.trim();if(!t)return;i.value='';const u=S.tm?.name||'You';const m={u,t,uid:MY,ts:Date.now()};CH.push(m);try{BC.postMessage(m)}catch(e){}if(S.room)try{push(ref(db,'rooms/'+S.room+'/chat'),m)}catch(e){}cu();if(S.opp)setTimeout(()=>say(S.opp,R(['Nice try! 😎','Wait till my yorkers come 🎯','GG so far','You got lucky!','Sixes incoming 💥','Bring it on!'])),1000)}
-function bindChat(code){if(chatUnsub){try{chatUnsub()}catch(e){}chatUnsub=null}if(!code)return;const r=ref(db,'rooms/'+code+'/chat');chatUnsub=onChildAdded(r,s=>{const v=s.val();if(!v||v.uid===MY)return;CH.push({u:v.u,t:v.t});cu()})}
+function snd(){const i=$('#ci'),t=i.value.trim();if(!t)return;i.value='';const u=S.tm?.name||'You';const m={u,t,uid:MY,ts:Date.now()};CH.push(m);try{BC.postMessage(m)}catch(e){}if(db&&S.room)try{push(ref(db,'rooms/'+S.room+'/chat'),m)}catch(e){}cu();if(S.opp)setTimeout(()=>say(S.opp,R(['Nice try! 😎','Wait till my yorkers come 🎯','GG so far','You got lucky!','Sixes incoming 💥','Bring it on!'])),1000)}
+function bindChat(code){if(chatUnsub){try{chatUnsub()}catch(e){}chatUnsub=null}if(!db||!code)return;const r=ref(db,'rooms/'+code+'/chat');chatUnsub=onChildAdded(r,s=>{const v=s.val();if(!v||v.uid===MY)return;CH.push({u:v.u,t:v.t});cu()})}
 /* MENU */
 function menu(){S={};app(`<div class="card" style="text-align:center"><h1>🏏 CRICKET CLASH 2D</h1><div class="mu">Build a ₹160 Cr squad of 22 · design your jersey · win T10 thrillers</div></div>
 <div class="r card"><span>Overs:</span><select id="mo">${Array.from({length:16},(_,i)=>`<option ${i+5==10?'selected':''}>${i+5}</option>`).join('')}</select><span>Pitch:</span><select id="mp"><option value="green">Green (seam)</option><option value="dead">Dead (flat)</option><option value="dust">Dust (spin)</option></select><span>Ground:</span><select id="md"><option value="small">Small</option><option value="medium" selected>Medium</option><option value="large">Large</option></select><span>Tournament size:</span><select id="tn">${[4,5,6,7,8,9,10].map(n=>`<option ${n==6?'selected':''}>${n}</option>`).join('')}</select></div>
@@ -108,7 +109,7 @@ function bot(nm){const s=sh(POOL),xi=[];let f=0;const ad=p=>{if(xi.length<11&&!x
 /* LOBBY */
 function lobby(){const n=S.mode=='tour'?S.n:2,nm=sh(TN).slice(0,n-1);S.names=nm;S.opp=nm[0];if(!S.on)return S.mode=='tour'?tstart():start(bot(nm[0]));
 const pn=['RahulKing','ProSlogger_09','SpinWizard','YorkerQueen','CoverDrive7','GullyBoy','ThalaFan','HitmanFC','MrCricket'];S.room=Math.random().toString(36).slice(2,6).toUpperCase();joinedPlayers={};let k=1;
-try{set(ref(db,'rooms/'+S.room+'/meta'),{host:MY,name:S.tm.name,mode:S.mode,n,ts:Date.now()});set(ref(db,'rooms/'+S.room+'/players/'+MY),{name:S.tm.name,ts:Date.now()});bindChat(S.room);if(roomUnsub){try{roomUnsub()}catch(e){}}roomUnsub=onValue(ref(db,'rooms/'+S.room+'/players'),snap=>{joinedPlayers=snap.val()||{};renderLobby()})}catch(e){}
+if(db)try{set(ref(db,'rooms/'+S.room+'/meta'),{host:MY,name:S.tm.name,mode:S.mode,n,ts:Date.now()});set(ref(db,'rooms/'+S.room+'/players/'+MY),{name:S.tm.name,ts:Date.now()});bindChat(S.room);if(roomUnsub){try{roomUnsub()}catch(e){}}roomUnsub=onValue(ref(db,'rooms/'+S.room+'/players'),snap=>{joinedPlayers=snap.val()||{};renderLobby()})}catch(e){}
 function renderLobby(){if(!$('#lb'))return;const real=Object.entries(joinedPlayers).filter(([id])=>id!==MY).map(([,v])=>v.name);const list=[...real,...pn.slice(0,Math.max(0,k-1-real.length))].slice(0,n-1);if(list.length)S.opp=list[0];$('#lb').innerHTML=`<div>✅ ${S.tm.name} (you)</div>`+list.map(x=>`<div>✅ ${x} <span class="mu">${20+Math.random()*40|0}ms</span></div>`).join('')+(list.length+1<n?'<div class="mu">Waiting for players...</div>':'');if(list.length+1>=n){$('#go').disabled=0}}
 app(`<h2>🌐 Online Lobby — Room ${S.room}</h2><div class="card" id="lb"></div><div class="mu">Room code: <b>${S.room}</b> · Live Firebase room & chat enabled.</div><button class="p" id="go" disabled onclick="${S.mode=='tour'?'tstart()':'start(bot(S.names[0]))'}">Start</button>`);
 renderLobby();const t=setInterval(()=>{if(!$('#lb')){clearInterval(t);return}renderLobby();if(k>=n){clearInterval(t);$('#go').disabled=0;say('System','Lobby full — ready!')}k++},700)}
@@ -166,6 +167,6 @@ app(`<h2>🏆 Tournament ${S.on?'(Online)':''}</h2><div class="card"><table><tr>
 async function tnext(){const T=S.T;while(T.i<T.fix.length){const[a,b]=T.fix[T.i++];if(a==T.H||b==T.H){S.opp=(a==T.H?b:a).name;const r=await match(a,b,T.H);S.res=tui;return rscreen(r,T.H,'S.res')}await match(a,b,null)}tui()}
 async function tfin(){const T=S.T,t=[...T.teams].sort((a,b)=>b.pts-a.pts||b.w-a.w),[a,b]=t,h=a==T.H||b==T.H,r=await match(a,b,h?T.H:null),ch=r.w;S.res=menu;app(`<div class="card" style="text-align:center"><div class="big">🏆 CHAMPIONS</div>${jersey(ch.j,ch.j.num,ch.name,200)}<h2>${ch.name}</h2><p>${r.tx}</p><p>${ch==T.H?'You lifted the trophy! 🎉':'Better luck next season.'}</p>${tmvp()}<button class="p" onclick="menu()">Main menu</button></div>`)}
 Object.assign(window,{tc,snd,menu,go,pre,jv,pick,ul,add,rm,auto,lineup,lu,mv,bwt,xo,xa,ready,tstats,tsq,saveG,loadG,editXI,tstart,tui,tnext,tfin,stUI});
-$('#ci').onkeydown=e=>e.key=='Enter'&&snd();
-menu();
+if($('#ci'))$('#ci').onkeydown=e=>e.key=='Enter'&&snd();
+try{menu()}catch(e){console.error(e);if($('#app'))$('#app').innerHTML='<div class="card"><b>Startup error:</b> '+e.message+'</div>'}
 </script></body></html>
