@@ -19,11 +19,7 @@ button{cursor:pointer}button.p{background:var(--ac);color:#111;border:0;font-wei
 <div id="cb"><div id="cp"><div id="cm2"></div><div class="r"><input id="ci" style="flex:1;min-width:0" placeholder="Chat..."><button onclick="snd()">Send</button></div></div><button class="p" onclick="tc()">💬 Chat</button></div>
 <script type="module">
   // ---- Firebase (your console config) ----
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
-  import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-analytics.js";
-  import { getDatabase, ref, set, get, push, update, onValue, onChildAdded }
-    from "https://www.gstatic.com/firebasejs/13.4.0/firebase-database.js";
-
+  const CDN = "https://www.gstatic.com/firebasejs/13.4.0/";
   const firebaseConfig = {
     apiKey: "AIzaSyBeIFiH8snD7FDPKEOt56O5dWRiaLT1A3s",
     authDomain: "data-fde21.firebaseapp.com",
@@ -35,23 +31,35 @@ button{cursor:pointer}button.p{background:var(--ac);color:#111;border:0;font-wei
     measurementId: "G-4SEQS0PTV7"
   };
 
-  const app = initializeApp(firebaseConfig);
+  (async () => {
+    try {
+      const [{ initializeApp }, d] = await Promise.all([
+        import(CDN + "firebase-app.js"),
+        import(CDN + "firebase-database.js")
+      ]);
+      const app = initializeApp(firebaseConfig);
+      const db = d.getDatabase(app);
+      const clean = v => (v === undefined ? null : JSON.parse(JSON.stringify(v))); // Firebase rejects `undefined`
 
-  // Analytics is optional: never let it break the game (blocked by ad-blockers, file://, etc.)
-  isSupported().then(ok => { if (ok) getAnalytics(app); }).catch(() => {});
+      // ---- Realtime Database adapter: this is the window.FB the game calls ----
+      window.FB = {
+        set:    (path, v) => d.set(d.ref(db, path), clean(v)),
+        push:   (path, v) => d.push(d.ref(db, path), clean(v)),
+        update: (path, o) => d.update(d.ref(db, path), clean(o)),
+        get:    async path => (await d.get(d.ref(db, path))).val(),
+        on:     (path, cb) => d.onValue(d.ref(db, path), s => cb(s.val())),         // returns unsubscribe fn
+        child:  (path, cb) => d.onChildAdded(d.ref(db, path), s => cb(s.val()))     // fires once per new child
+      };
 
-  // ---- Realtime Database adapter: this is the window.FB the game calls ----
-  const db = getDatabase(app);
-  const clean = v => (v === undefined ? null : JSON.parse(JSON.stringify(v))); // Firebase rejects `undefined`
-
-  window.FB = {
-    set:    (path, v) => set(ref(db, path), clean(v)),
-    push:   (path, v) => push(ref(db, path), clean(v)),
-    update: (path, o) => update(ref(db, path), clean(o)),
-    get:    async path => (await get(ref(db, path))).val(),
-    on:     (path, cb) => onValue(ref(db, path), s => cb(s.val())),          // returns unsubscribe fn
-    child:  (path, cb) => onChildAdded(ref(db, path), s => cb(s.val()))      // fires once per new child
-  };
+      // Analytics is optional: never let it break the game (ad-blockers, file://, etc.)
+      import(CDN + "firebase-analytics.js")
+        .then(async a => { if (await a.isSupported()) a.getAnalytics(app); })
+        .catch(() => {});
+    } catch (e) {
+      window.FBERR = String((e && e.message) || e);   // shown by the game if online mode can't start
+      console.error("Firebase failed to load:", e);
+    }
+  })();
 </script>
 
 <script>
@@ -75,25 +83,38 @@ return`<svg viewBox="0 0 200 200" width="${s}" height="${s}"><defs><clipPath id=
 let S={},F={o:'all',q:''},CH=[],BC;try{BC=new BroadcastChannel('cricket-clash');BC.onmessage=e=>{CH.push(e.data);cu()}}catch(e){}
 const app=h=>$('#app').innerHTML=h;
 function tc(){const p=$('#cp');p.style.display=p.style.display=='block'?'none':'block';cu()}
-function cu(){$('#cm2').innerHTML=CH.slice(-40).map(m=>`<div><b>${m.u}:</b> ${m.t}</div>`).join('');$('#cm2').scrollTop=9e9}
+function cu(){$('#cm2').innerHTML=CH.slice(-40).map(m=>`<div><b>${esc(m.u)}:</b> ${esc(m.t)}</div>`).join('');$('#cm2').scrollTop=9e9}
 function say(u,t){CH.push({u,t});cu()}
 function snd(){const i=$('#ci'),t=i.value.trim();if(!t)return;i.value='';const u=S.tm?.name||'You';CH.push({u,t});try{BC.postMessage({u,t})}catch(e){}cu();if(S.net&&window.FB)FB.push('rooms/'+S.net.code+'/chat',{u,t,id:MY});if(S.opp)setTimeout(()=>say(S.opp,R(['Nice try! 😎','Wait till my yorkers come 🎯','GG so far','You got lucky!','Sixes incoming 💥','Bring it on!'])),1000)}
 $('#ci').onkeydown=e=>e.key=='Enter'&&snd();
+/* ROOM CODE + ONLINE HELPERS */
+const CODE_CHARS='ABCDEFGHJKLMNPQRSTUVWXYZ23456789',genCode=()=>Array.from({length:4},()=>CODE_CHARS[Math.random()*CODE_CHARS.length|0]).join(''),normCode=v=>(v||'').toUpperCase().replace(/[^A-Z0-9]/g,''),tmo=(p,ms)=>Promise.race([p,new Promise((_,rj)=>setTimeout(()=>rj(new Error('timeout')),ms))]),esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),cleanName=n=>String(n||'Guest').replace(/[<>&"'`]/g,'').slice(0,24)||'Guest';
+let NU=[];
+function copyCode(c){try{navigator.clipboard.writeText(c)}catch(e){}const b=$('#cpb');if(b){b.textContent='Copied ✓';setTimeout(()=>{b.textContent='📋 Copy code'},1500)}}
+function rb(){if(!S.on||!S.code)return'';const j=S.role=='join';return`<div class="card r sp" style="border-color:var(--ac)"><div><div class="mu">${j?'Joining room':'Your room code'}</div><div class="big" style="letter-spacing:6px;color:var(--ac)">${S.code}</div><div class="mu">${j?'You connect to this room after you finish your squad and lineup':'Share this code with your friend - they tap Join and type it in'}</div></div><button id="cpb" onclick="copyCode('${S.code}')">📋 Copy code</button></div>`}
+function leaveRoom(){NU.splice(0).forEach(u=>{try{u()}catch(e){}});const n=S.net;if(n&&!n.g&&window.FB)try{FB.set('rooms/'+n.code,null).catch(()=>{})}catch(e){}S.net=null;menu()}
+async function joinCheck(code,cfg){if(!(cfg.on&&cfg.mode=='1v1'&&window.FB))return'';try{const[h,s]=await tmo(Promise.all([FB.get('rooms/'+code+'/players/host'),FB.get('rooms/'+code+'/state')]),8000);if(!h)return'Room '+code+' not found. Check the code with your host.';if(s=='play')return'That match has already started.';return''}catch(e){return'Could not reach the online database ('+(e.message=='timeout'?'timed out':e.message)+'). Check your internet and Firebase rules.'}}
 /* MENU */
 function menu(){S={};app(`<div class="card" style="text-align:center"><h1>🏏 CRICKET CLASH 2D</h1><div class="mu">Build a ₹160 Cr squad of 22 · design your jersey · win T10 thrillers</div></div>
 <div class="r card"><input id="rc" placeholder="Room code (to join)" style="width:150px"><span>Overs:</span><select id="mo">${Array.from({length:16},(_,i)=>`<option ${i+5==10?'selected':''}>${i+5}</option>`).join('')}</select><span>Pitch:</span><select id="mp"><option value="green">Green (seam)</option><option value="dead">Dead (flat)</option><option value="dust">Dust (spin)</option></select><span>Ground:</span><select id="md"><option value="small">Small</option><option value="medium" selected>Medium</option><option value="large">Large</option></select><span>Tournament size:</span><select id="tn">${[4,5,6,7,8,9,10].map(n=>`<option ${n==6?'selected':''}>${n}</option>`).join('')}</select></div>
 <div class="g g4">${[['1v1','Offline vs Bot',0,''],['1v1','Host 1v1',1,'host'],['1v1','Join 1v1',1,'join'],['tour','Offline Tournament',0,''],['tour','Host Tournament',1,'host'],['tour','Join Tournament',1,'join']].map(([m,l,o,r])=>`<button class="p" style="padding:22px;font-size:16px" onclick="go('${m}',${o},'${r}')">${l}</button>`).join('')}</div>
 ${hasSave()?'<button class="p" onclick="loadG()" style="width:100%;padding:14px;margin:8px 0">▶ Continue saved game</button>':''}<div class="card mu">Rules: 10 overs a side · 22-man squad · max 8 foreign in squad, 4 in XI · 5 bowlers, 2 overs each · captain +4 &amp; vice +2 rating boost.</div>`)}
-function go(m,o,r){if(o&&!window.FB)return alert('Online database is still connecting (or blocked). Check your internet / ad-blocker and try again.');if(r=='join'&&!$('#rc').value.trim())return alert('Enter the room code to join');S={role:r,code:($('#rc').value||'').trim(),mode:m,on:o,n:+$('#tn').value,N:+$('#mo').value,pitch:$('#mp').value,dim:$('#md').value,st:1,sp:1,j:{c:[...PRE[0]],pat:'stripes',num:18}};setup()}
+async function go(m,o,r){const cfg={mode:m,on:o,n:+$('#tn').value,N:+$('#mo').value,pitch:$('#mp').value,dim:$('#md').value};
+if(o&&m=='1v1'&&!window.FB)return alert('Online database is not connected'+(window.FBERR?' ('+window.FBERR+')':' yet - wait a few seconds and try again')+'. Check your internet / ad-blocker.');
+if(r=='join'){const typed=normCode($('#rc').value);if(!typed)return joinScreen(cfg);const er=await joinCheck(typed,cfg);if(er)return joinScreen(cfg,er,typed);return begin(cfg,r,typed)}
+begin(cfg,r,r=='host'?genCode():'')}
+function begin(cfg,r,code){S={role:r,code:cfg.on?code:'',...cfg,st:1,sp:1,j:{c:[...PRE[0]],pat:'stripes',num:18}};setup()}
+function joinScreen(cfg,msg,val){app(`<div class="card" style="text-align:center;max-width:440px;margin:24px auto"><h2>🔑 Join a room</h2><div class="mu">Type the room code your host shared with you</div><input id="jc" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE" value="${normCode(val)}" style="width:70%;font-size:30px;text-align:center;letter-spacing:8px;text-transform:uppercase;margin:14px 0"><div id="je" style="color:#e63946;min-height:22px;margin-bottom:8px"></div><div class="r" style="justify-content:center"><button class="p" id="jb" style="padding:12px 26px">Join room →</button><button onclick="menu()">Back</button></div></div>`);
+$('#je').textContent=msg||'';const i=$('#jc'),b=$('#jb'),run=async()=>{const c=normCode(i.value);if(!c){$('#je').textContent='Please enter the room code';return}b.disabled=1;b.textContent='Checking...';const er=await joinCheck(c,cfg);if(er){b.disabled=0;b.textContent='Join room →';$('#je').textContent=er;return}begin(cfg,'join',c)};b.onclick=run;i.onkeydown=e=>{if(e.key=='Enter')run()};i.focus()}
 /* SETUP */
-function setup(){const j=S.j;app(`<h2>Team & Jersey</h2><div class="g g2"><div class="card g"><input id="tnm" placeholder="Team name" value="${S.tname||'Hyderabad Hawks'}" oninput="jv()"><div class="r">${PRE.map((p,i)=>`<button onclick="pre(${i})" style="background:linear-gradient(90deg,${p[0]} 50%,${p[1]} 50%);width:44px;height:30px"></button>`).join('')}</div>
+function setup(){const j=S.j;app(`${rb()}<h2>Team & Jersey</h2><div class="g g2"><div class="card g"><input id="tnm" placeholder="Team name" value="${S.tname||'Hyderabad Hawks'}" oninput="jv()"><div class="r">${PRE.map((p,i)=>`<button onclick="pre(${i})" style="background:linear-gradient(90deg,${p[0]} 50%,${p[1]} 50%);width:44px;height:30px"></button>`).join('')}</div>
 <div class="r">Body<input type="color" id="c0" value="${j.c[0]}" oninput="jv()">Pattern<input type="color" id="c1" value="${j.c[1]}" oninput="jv()">Sleeves<input type="color" id="c2" value="${j.c[2]}" oninput="jv()"></div>
 <div class="r">Style<select id="pt" onchange="jv()">${PATS.map(p=>`<option ${p==j.pat?'selected':''}>${p}</option>`).join('')}</select>No.<input id="nu" type="number" min="1" max="99" value="${j.num}" style="width:70px" oninput="jv()"></div></div>
 <div class="card" style="text-align:center" id="jp"></div></div><button class="p" onclick="jv();S.tm={name:S.tname,j:S.j,sq:[]};pick()">Next: Pick squad →</button> <button onclick="menu()">Back</button>`);jv()}
 function pre(i){S.j.c=[...PRE[i]];['c0','c1','c2'].forEach((k,x)=>$('#'+k).value=PRE[i][x]);jv()}
 function jv(){S.tname=$('#tnm').value||'My XI';S.j={c:[$('#c0').value,$('#c1').value,$('#c2').value],pat:$('#pt').value,num:+$('#nu').value||18};$('#jp').innerHTML=jersey(S.j,S.j.num,S.tname,240)+`<h3>${S.tname}</h3>`}
 /* PICK */
-function pick(){app(`<div class="r sp"><h2>Pick Squad</h2><button onclick="auto()">Auto-fill</button></div><div class="card r sp" id="hd"></div><div class="g g2"><div class="card"><div class="r"><select onchange="F.o=this.value;ul()"><option value="all">All</option><option value="I">International (India)</option><option value="D">Domestic</option><option value="F">Foreign</option><option value="L">Legends (old gen)</option></select><select onchange="F.r=this.value;ul()"><option value="all">All roles</option><option value="B">Batters</option><option value="FB">Fast bowlers</option><option value="SP">Spinners</option><option value="A">All-rounders</option><option value="W">Wicket-keepers</option></select><input placeholder="Search" oninput="F.q=this.value.toLowerCase();ul()" style="flex:1;min-width:0"></div><div class="sc" id="pl"></div></div><div class="card"><b>Your squad</b><div class="sc" id="sq"></div></div></div>${sbtn()}<button class="p" id="nx" onclick="lineup()">Next: Lineup →</button>`);ul()}
+function pick(){app(`${rb()}<div class="r sp"><h2>Pick Squad</h2><button onclick="auto()">Auto-fill</button></div><div class="card r sp" id="hd"></div><div class="g g2"><div class="card"><div class="r"><select onchange="F.o=this.value;ul()"><option value="all">All</option><option value="I">International (India)</option><option value="D">Domestic</option><option value="F">Foreign</option><option value="L">Legends (old gen)</option></select><select onchange="F.r=this.value;ul()"><option value="all">All roles</option><option value="B">Batters</option><option value="FB">Fast bowlers</option><option value="SP">Spinners</option><option value="A">All-rounders</option><option value="W">Wicket-keepers</option></select><input placeholder="Search" oninput="F.q=this.value.toLowerCase();ul()" style="flex:1;min-width:0"></div><div class="sc" id="pl"></div></div><div class="card"><b>Your squad</b><div class="sc" id="sq"></div></div></div>${sbtn()}<button class="p" id="nx" onclick="lineup()">Next: Lineup →</button>`);ul()}
 const ok=p=>{const t=S.tm,l=160-t.sq.reduce((a,x)=>a+x.p,0);return t.sq.length<22&&p.p<=l-(21-t.sq.length)&&(p.o!='F'||t.sq.filter(x=>x.o=='F').length<8)};
 const tag=p=>`<span class="tg ${p.o}">${{I:'INT',D:'DOM',F:'FGN'}[p.o]}</span>${p.l?'<span class="tg" style="background:#ffd60a;color:#111">LEG</span>':''}`;
 function ul(){const t=S.tm,sp=t.sq.reduce((a,x)=>a+x.p,0);$('#hd').innerHTML=`<span>Purse: <b>₹${(160-sp).toFixed(1)} Cr</b></span><span>Squad ${t.sq.length}/22</span><span>Foreign ${t.sq.filter(x=>x.o=='F').length}/8</span><span class="mu">${[['B','Bat'],['W','WK'],['A','AR'],['Bw','Bowl']].map(([k,l])=>l+' '+t.sq.filter(x=>x.t==k).length).join(' · ')}</span>`;
@@ -104,7 +125,7 @@ function rm(i){S.tm.sq=S.tm.sq.filter(p=>p.id!=i);ul()}
 function auto(){const t=S.tm;while(t.sq.length<22){const l=160-t.sq.reduce((a,x)=>a+x.p,0),c=POOL.filter(p=>!t.sq.includes(p)&&ok(p)),g=c.filter(p=>p.p<=l/(22-t.sq.length)*1.4);const p=R(g.length?g:c.sort((a,b)=>a.p-b.p).slice(0,3));t.sq.push(p)}ul()}
 /* LINEUP */
 function lineup(cb){const t=S.tm;S.cb=cb;if(!t.xi){const bl=[...t.sq].sort((a,b)=>b.bowl-a.bowl),xi=[];let f=0;const ad=p=>{if(xi.length<11&&!xi.includes(p)&&(p.o!='F'||f<4)){xi.push(p);f+=p.o=='F'}};bl.slice(0,5).forEach(ad);[...t.sq].sort((a,b)=>b.bat-a.bat).forEach(ad);t.xi=xi.sort((a,b)=>b.bat-a.bat);t.bw=[...xi].sort((a,b)=>b.bowl-a.bowl).slice(0,5).map(p=>p.id);const s=[...xi].sort((a,b)=>Math.max(b.bat,b.bowl)-Math.max(a.bat,a.bowl));t.c=s[0].id;t.vc=s[1].id;t.wk=(xi.find(p=>p.t=='W')||xi[0]).id}lu()}
-function lu(){const t=S.tm;if(!t.xi.some(p=>p.id==t.wk))t.wk=(t.xi.find(p=>p.t=='W')||t.xi[0]||{}).id;if(t.bw.length==5){if(!t.ov||t.ov.some(id=>!t.bw.includes(id)))t.ov=Array.from({length:10},(_,i)=>t.bw[i%5])}else t.ov=null;const o=t.xi.map(p=>`<option value="${p.id}" `);app(`<h2>Batting Order, Bowling & Captains</h2><div class="g g2"><div class="card"><b>Playing XI (${t.xi.length}/11) — batting order</b>${t.xi.map((p,i)=>`<div class="pl"><span>${i+1}. ${p.n} ${tag(p)} ${p.id==t.c?'<b>(C)</b>':p.id==t.vc?'<b>(VC)</b>':''} ${p.id==t.wk?'🧤':''}</span><span class="r"><button onclick="mv(${i},-1)">▲</button><button onclick="mv(${i},1)">▼</button><button class="${t.bw.includes(p.id)?'p':''}" onclick="bwt(${p.id})">🎯${t.bw.includes(p.id)?t.bw.indexOf(p.id)+1:''}</button><button onclick="xo(${p.id})">✕</button></span></div>`).join('')}<div class="mu">🎯 = bowler (pick 5, tap order = over order, 2 overs each)</div></div>
+function lu(){const t=S.tm;if(!t.xi.some(p=>p.id==t.wk))t.wk=(t.xi.find(p=>p.t=='W')||t.xi[0]||{}).id;if(t.bw.length==5){if(!t.ov||t.ov.some(id=>!t.bw.includes(id)))t.ov=Array.from({length:10},(_,i)=>t.bw[i%5])}else t.ov=null;const o=t.xi.map(p=>`<option value="${p.id}" `);app(`${rb()}<h2>Batting Order, Bowling & Captains</h2><div class="g g2"><div class="card"><b>Playing XI (${t.xi.length}/11) — batting order</b>${t.xi.map((p,i)=>`<div class="pl"><span>${i+1}. ${p.n} ${tag(p)} ${p.id==t.c?'<b>(C)</b>':p.id==t.vc?'<b>(VC)</b>':''} ${p.id==t.wk?'🧤':''}</span><span class="r"><button onclick="mv(${i},-1)">▲</button><button onclick="mv(${i},1)">▼</button><button class="${t.bw.includes(p.id)?'p':''}" onclick="bwt(${p.id})">🎯${t.bw.includes(p.id)?t.bw.indexOf(p.id)+1:''}</button><button onclick="xo(${p.id})">✕</button></span></div>`).join('')}<div class="mu">🎯 = bowler (pick 5, tap order = over order, 2 overs each)</div></div>
 <div class="card"><div class="r">Captain<select onchange="S.tm.c=+this.value;lu()">${t.xi.map(p=>`<option value="${p.id}" ${p.id==t.c?'selected':''}>${p.n}</option>`).join('')}</select></div><div class="r">Vice<select onchange="S.tm.vc=+this.value;lu()">${t.xi.map(p=>`<option value="${p.id}" ${p.id==t.vc?'selected':''}>${p.n}</option>`).join('')}</select></div><div class="r">🧤 Wicket-keeper<select onchange="S.tm.wk=+this.value;lu()">${t.xi.map(p=>`<option value="${p.id}" ${p.id==t.wk?'selected':''}>${p.n}${p.t=='W'?' 🧤':''}</option>`).join('')}</select></div><div class="mu">Specialist keepers give a small wicket-taking bonus; a non-keeper behind the stumps hurts your side.</div><b>Bench</b><div class="sc">${t.sq.filter(p=>!t.xi.includes(p)).map(p=>`<div class="pl" onclick="xa(${p.id})"><span>${p.n} ${tag(p)} <small class="mu">${p.bat}/${p.bowl}</small></span><b>+</b></div>`).join('')}</div></div></div><div class="card"><b>Bowling plan — who bowls each over</b> <span class="mu">(10-over template, auto-scaled to your match length; you can change the bowler before every over during the match)</span>${t.ov?[['⚡ Powerplay',0,3],['Middle overs',3,7],['🔥 Death overs',7,10]].map(([l,a,z])=>`<div style="margin-top:8px"><b>${l}</b> <span class="mu">(overs ${a+1}-${z})</span><div class="r">${t.ov.slice(a,z).map((id,k)=>`<span>Ov ${a+k+1} <select onchange="S.tm.ov[${a+k}]=+this.value;lu()">${t.bw.map(b=>`<option value="${b}" ${b==id?'selected':''}>${POOL[b].n}</option>`).join('')}</select></span>`).join('')}</div></div>`).join(''):'<div class="mu">Pick 5 bowlers (🎯) first</div>'}</div><div id="er" style="color:#e63946"></div>${sbtn()}<button class="p" onclick="ready()">Confirm & Play →</button>`)}
 const mv=(i,d)=>{const x=S.tm.xi,j=i+d;if(j<0||j>10||!x[j])return;[x[i],x[j]]=[x[j],x[i]];lu()};
 const bwt=id=>{const b=S.tm.bw;b.includes(id)?b.splice(b.indexOf(id),1):b.length<5&&b.push(id);lu()};
@@ -117,7 +138,7 @@ const mine=()=>{const t=S.tm;return mk(t.name,t.j,t.xi,t.bw,t.c,t.vc,t.ov,t.wk)}
 function bot(nm){const s=sh(POOL),xi=[];let f=0;const ad=p=>{if(xi.length<11&&!xi.includes(p)&&(p.o!='F'||f<4)){xi.push(p);f+=p.o=='F'}};s.filter(p=>p.bowl>=70).slice(0,5).forEach(ad);s.filter(p=>p.bat>=68).forEach(ad);s.forEach(ad);xi.sort((a,b)=>b.bat-a.bat);const bw=[...xi].sort((a,b)=>b.bowl-a.bowl).slice(0,5).map(p=>p.id),c=sh(xi)[0].id,j={c:sh(R(PRE)),pat:R(PATS),num:R([7,10,18,45,77])};return mk(nm,j,xi,bw,c,xi[1].id)}
 /* LOBBY */
 function lobby(){const n=S.mode=='tour'?S.n:2,nm=sh(TN).slice(0,n-1);S.names=nm;S.opp=nm[0];if(S.on&&S.mode=='1v1'&&window.FB){S.opp=null;return netLobby()}if(!S.on)return S.mode=='tour'?tstart():start(bot(nm[0]));
-const pn=['RahulKing','ProSlogger_09','SpinWizard','YorkerQueen','CoverDrive7','GullyBoy','ThalaFan','HitmanFC','MrCricket'];S.room=S.role=='join'&&S.code?S.code.toUpperCase():Math.random().toString(36).slice(2,6).toUpperCase();let k=1;app(`<h2>🌐 Online Lobby — Room ${S.room} (${S.role=='join'?'joined':'hosting'})</h2><div class="card" id="lb"></div><div class="mu">Demo lobby: opponents are AI "online" players. Chat works across browser tabs.</div><button class="p" id="go" disabled onclick="${S.mode=='tour'?'tstart()':'start(bot(S.names[0]))'}">Start</button>`);
+const pn=['RahulKing','ProSlogger_09','SpinWizard','YorkerQueen','CoverDrive7','GullyBoy','ThalaFan','HitmanFC','MrCricket'];S.room=S.code||genCode();let k=1;app(`<h2>🌐 Online Lobby — Room ${S.room} (${S.role=='join'?'joined':'hosting'})</h2><div class="card" id="lb"></div><div class="mu">Demo lobby: opponents are AI "online" players. Chat works across browser tabs.</div><button class="p" id="go" disabled onclick="${S.mode=='tour'?'tstart()':'start(bot(S.names[0]))'}">Start</button>`);
 const t=setInterval(()=>{$('#lb').innerHTML=`<div>✅ ${S.tm.name} (you)</div>`+pn.slice(0,k-1).map(x=>`<div>✅ ${x} <span class="mu">${20+Math.random()*40|0}ms</span></div>`).join('')+(k<n?'<div class="mu">Waiting for players...</div>':'');if(k>=n){clearInterval(t);$('#go').disabled=0;say('System','Lobby full — ready!')}k++},700)}
 /* ENGINE */
 const bn=p=>p.bn||0;
@@ -184,12 +205,13 @@ function bc(I,x){if(!S.net||S.net.g||!window.FB)return;FB.push('rooms/'+S.net.co
 function remB(I){return new Promise(res=>{const o=I.b/6|0,q=Math.ceil(I.N/5),c={};I.bl.pl.slice(0,o).forEach(p=>c[p.n]=(c[p.n]||0)+1);const prev=I.bl.pl[o-1],el=I.bl.xi.filter(p=>(c[p.n]||0)<q&&p!=prev).sort((a,b)=>b.bowl-a.bowl),id='q'+Date.now(),b='rooms/'+S.net.code;let un=()=>{},done=0;const fin=v=>{if(done)return;done=1;un();if(v&&v.id!=null){const p=el.find(p=>p.id==v.id);if(p)I.bl.pl[o]=p;I.bl.hf=1;I.bl.fm=v.fm||'nor';I.bl.fc=+v.fc}if(!el.includes(I.bl.pl[o]))I.bl.pl[o]=el[0];$('#bp').innerHTML='';res()};$('#bp').innerHTML=`⏳ Waiting for ${I.bl.name} to set over ${o+1}...`;FB.push(b+'/ev',{k:'rq',t:'bowl',id,o,q,def:I.bl.pl[o]?I.bl.pl[o].id:el[0].id,el:el.map(p=>({id:p.id,n:p.n,bl:p.bowl,sp:SPIN.has(p.n)?1:0,u:c[p.n]||0}))});un=FB.on(b+'/rs/'+id,v=>v&&fin(v));setTimeout(()=>fin(null),30000)})}
 function remBat(I){return new Promise(res=>{const el=I.bt.xi.map((p,i)=>({p,i})).filter(e=>e.i>=I.s);if(el.length<2)return res();const id='q'+Date.now(),b='rooms/'+S.net.code;let un=()=>{},done=0;const fin=v=>{if(done)return;done=1;un();if(v&&v.i!=null){const j=+v.i,x=I.bt.xi,s=I.sc;if(j>=I.s&&x[j]){[x[I.s],x[j]]=[x[j],x[I.s]];[s[I.s],s[j]]=[s[j],s[I.s]]}}$('#bp').innerHTML='';res()};$('#bp').innerHTML=`⏳ Waiting for ${I.bt.name} to pick the next batter...`;FB.push(b+'/ev',{k:'rq',t:'bat',id,el:el.map(e=>({i:e.i,n:e.p.n,b:e.p.bat}))});un=FB.on(b+'/rs/'+id,v=>v&&fin(v));setTimeout(()=>fin(null),30000)})}
 async function netToss(H,O){const w=Math.random()<.5?H:O,bat=Math.random()<.4,f=bat?w:(w==H?O:H),m=`🪙 ${w.name} won the toss and chose to ${bat?'bat':'bowl'} first`;say('System',m);FB.push('rooms/'+S.net.code+'/chat',{u:'System',t:m,id:'sys'});await new Promise(r=>setTimeout(r,1800));return f}
-async function netLobby(){const host=S.role!='join',code=host?Math.random().toString(36).slice(2,6).toUpperCase():S.code.toUpperCase(),b='rooms/'+code,t=S.tm,d={name:t.name,j:t.j,xi:t.xi.map(p=>p.id),bw:t.bw,ov:t.ov,c:t.c,vc:t.vc,wk:t.wk};S.room=code;S.net={code,g:!host};
-try{if(host){await FB.set(b,{state:'lobby',ts:Date.now()});await FB.set(b+'/players/host',d)}else{const h=await FB.get(b+'/players/host');if(!h){alert('Room not found');return menu()}await FB.set(b+'/players/guest',d)}}catch(e){alert('Online database error — check your Firebase rules');return menu()}
-FB.child(b+'/chat',m=>{if(m.id!=MY){CH.push(m);cu()}});
-app(`<h2>🌐 Room ${code} (${host?'hosting':'joined'})</h2><div class="card" id="lb">Connecting...</div><button class="p" id="go" disabled>Start match</button>`);
-if(host){FB.on(b+'/players/guest',g=>{$('#lb').innerHTML=`✅ ${t.name} (you)<br>`+(g?`✅ ${g.name} (opponent joined)`:`Share room code <b>${code}</b> and wait for your opponent...`);if(g){$('#go').disabled=0;S.gd=g}});$('#go').onclick=async()=>{await FB.set(b+'/set',{N:S.N,pitch:S.pitch,dim:S.dim});await FB.set(b+'/state','play');netHost(S.gd)}}
-else{$('#lb').innerHTML='Joined! Waiting for the host to start...';$('#go').style.display='none';FB.on(b+'/state',async s=>{if(s=='play'&&!S.started){S.started=1;Object.assign(S,await FB.get(b+'/set'));guestPlay()}})}}
+async function netLobby(){const host=S.role!='join',code=S.code||genCode(),b='rooms/'+code,t=S.tm,d={name:t.name,j:t.j,xi:t.xi.map(p=>p.id),bw:t.bw,ov:t.ov,c:t.c,vc:t.vc,wk:t.wk};S.room=code;S.code=code;S.net={code,g:!host};
+app(`<h2>🌐 Online Room (${host?'hosting':'joined'})</h2><div class="card" style="text-align:center;border-color:var(--ac)"><div class="mu">Room code</div><div class="big" style="font-size:46px;letter-spacing:10px;color:var(--ac)">${code}</div><button id="cpb" onclick="copyCode('${code}')">📋 Copy code</button></div><div class="card" id="lb">Connecting to the online database...</div><div class="r"><button class="p" id="go" disabled>Start match</button><button onclick="leaveRoom()">Leave room</button></div>`);
+try{if(host){await tmo(FB.set(b,{state:'lobby',ts:Date.now()}),10000);await tmo(FB.set(b+'/players/host',d),10000)}else{const h=await tmo(FB.get(b+'/players/host'),10000);if(!h){$('#lb').innerHTML='❌ Room '+code+' was not found. Press Leave room and check the code with your host.';return}await tmo(FB.set(b+'/players/guest',d),10000)}}
+catch(e){const to=e.message=='timeout';$('#lb').innerHTML=`<div style="color:#e63946"><b>❌ ${to?'Could not connect to the online database (timed out)':'Database error'}</b></div><div class="mu" style="margin:6px 0">${to?'':esc(e.message)+'<br>'}Check that (1) a Realtime Database exists for this Firebase project, (2) its rules allow read/write on "rooms", and (3) nothing blocks firebaseio.com.</div><button class="p" onclick="netLobby()">Retry</button>`;return}
+NU.push(FB.child(b+'/chat',m=>{if(m.id!=MY){CH.push(m);cu()}}));
+if(host){NU.push(FB.on(b+'/players/guest',g=>{if(g)g.name=cleanName(g.name);$('#lb').innerHTML=`✅ ${esc(t.name)} (you)<br>`+(g?`✅ ${esc(g.name)} (opponent joined)`:`Share room code <b>${code}</b> and wait for your opponent...`);if(g){$('#go').disabled=0;S.gd=g}}));$('#go').onclick=async()=>{await FB.set(b+'/set',{N:S.N,pitch:S.pitch,dim:S.dim});await FB.set(b+'/state','play');netHost(S.gd)}}
+else{$('#lb').innerHTML='Joined! Waiting for the host to start...';$('#go').style.display='none';NU.push(FB.on(b+'/state',async s=>{if(s=='play'&&!S.started){S.started=1;Object.assign(S,await FB.get(b+'/set'));guestPlay()}}))}}
 async function netHost(g){const b='rooms/'+S.net.code,H=mine(),G=mk(g.name,g.j,g.xi.map(i=>POOL[i]),g.bw,g.c,g.vc,g.ov,g.wk);G.rem=true;S.rg=G;S.rst=1;FB.on(b+'/in',v=>{if(!v)return;if(v.st!=null)S.rst=+v.st;if(v.fm){G.hf=1;G.fm=v.fm;G.fc=+v.fc}});const r=await match(H,G,H);FB.push(b+'/ev',{k:'end',win:r.w==H?'host':'guest',tx:r.tx,a:r.a,b:r.b,mv:`${r.mvp.n} (${r.mvp.t}) — ${Math.round(r.mvp.pts)} pts`});S.res=()=>{S.tm.xi=null;S.net=null;menu()};rscreen(r,H,'S.res')}
 function guestPlay(){app(`<div class="g" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))"><div><div class="card" id="sb">Match starting...</div><canvas id="cv" width="640" height="380"></canvas><div class="card" id="cm"></div><div class="card"><div id="stc"></div><div id="bp" style="margin-top:8px"></div><div id="fp" class="r" style="margin-top:8px"></div></div></div><div class="card" id="scd" style="overflow:auto;max-height:700px"></div></div>`);S.spec=false;stUI();gfp();nin({st:S.st});FB.child('rooms/'+S.net.code+'/ev',e=>gev(e))}
 function gev(e){Q=Q.then(async()=>{if(e.k=='b'){await play(e.x,{bt:{j:e.j[0]},bl:{j:e.j[1]}});$('#sb').innerHTML=e.sb;$('#cm').innerHTML=e.cm;$('#scd').innerHTML=e.sc}else if(e.k=='rq')await grq(e);else if(e.k=='end')gend(e)})}
