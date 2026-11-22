@@ -18,15 +18,10 @@ button{cursor:pointer}button.p{background:var(--ac);color:#111;border:0;font-wei
 </style></head><body><div id="app" class="w"></div>
 <div id="cb"><div id="cp"><div id="cm2"></div><div class="r"><input id="ci" style="flex:1;min-width:0" placeholder="Chat..."><button onclick="snd()">Send</button></div></div><button class="p" onclick="tc()">💬 Chat</button></div>
 <script type="module">
-  // Import the functions you need from the SDKs you need
   import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
   import { getAnalytics } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-analytics.js";
   import { getDatabase, ref, set, push, onValue, onChildAdded } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-database.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
 
-  // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
   const firebaseConfig = {
     apiKey: "AIzaSyBeIFiH8snD7FDPKEOt56O5dWRiaLT1A3s",
     authDomain: "data-fde21.firebaseapp.com",
@@ -38,11 +33,15 @@ button{cursor:pointer}button.p{background:var(--ac);color:#111;border:0;font-wei
     measurementId: "G-4SEQS0PTV7"
   };
 
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  try { getAnalytics(app); } catch (e) {}
   let db = null;
-  try { db = getDatabase(app); } catch (e) {}
+  try {
+    const app = initializeApp(firebaseConfig);
+    try { getAnalytics(app); } catch (e) {}
+    try { db = getDatabase(app); } catch (e) {}
+  } catch (e) {
+    console.warn("Firebase init skipped:", e);
+  }
+
   const MY = 'u_' + Math.random().toString(36).slice(2, 8);
   let chatUnsub = null, roomUnsub = null, joinedPlayers = {};
 
@@ -64,11 +63,11 @@ if(k=='dots')for(let y=0;y<6;y++)for(let x=0;x<6;x++)p+=`<circle cx="${50+x*20+(
 if(k=='fade')p=`<defs><linearGradient id="${id}g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="200" height="200" fill="url(#${id}g)"/>`;
 return`<svg viewBox="0 0 200 200" width="${s}" height="${s}"><defs><clipPath id="${id}"><path d="${sp}"/></clipPath></defs><path d="${sp}" fill="${a}"/><g clip-path="url(#${id})">${p}<rect x="55" y="170" width="90" height="15" fill="${c}" opacity=".35"/></g><path d="M60 20L15 55L35 85L55 70Z" fill="${c}"/><path d="M140 20L185 55L165 85L145 70Z" fill="${c}"/><path d="M85 12Q100 30 115 12" stroke="${c}" stroke-width="5" fill="none"/><text x="100" y="52" text-anchor="middle" font-size="10" font-weight="800" fill="${c}" stroke="#0006" stroke-width=".4">${nm.slice(0,14).toUpperCase()}</text><text x="100" y="130" text-anchor="middle" font-size="46" font-weight="900" fill="${c}" stroke="#0007" stroke-width="1.2">${num}</text><path d="${sp}" fill="none" stroke="#0005" stroke-width="2"/></svg>`}
 let S={},F={o:'all',q:''},CH=[],BC;try{BC=new BroadcastChannel('cricket-clash');BC.onmessage=e=>{CH.push(e.data);cu()}}catch(e){}
-const app=h=>$('#app').innerHTML=h;
-function tc(){const p=$('#cp');p.style.display=p.style.display=='block'?'none':'block';cu()}
+const app=h=>{if($('#app'))$('#app').innerHTML=h};
+function tc(){const p=$('#cp');if(!p)return;p.style.display=p.style.display=='block'?'none':'block';cu()}
 function cu(){const e=$('#cm2');if(!e)return;e.innerHTML=CH.slice(-40).map(m=>`<div><b>${m.u}:</b> ${m.t}</div>`).join('');e.scrollTop=9e9}
 function say(u,t){CH.push({u,t});cu()}
-function snd(){const i=$('#ci'),t=i.value.trim();if(!t)return;i.value='';const u=S.tm?.name||'You';const m={u,t,uid:MY,ts:Date.now()};CH.push(m);try{BC.postMessage(m)}catch(e){}if(db&&S.room)try{push(ref(db,'rooms/'+S.room+'/chat'),m)}catch(e){}cu();if(S.opp)setTimeout(()=>say(S.opp,R(['Nice try! 😎','Wait till my yorkers come 🎯','GG so far','You got lucky!','Sixes incoming 💥','Bring it on!'])),1000)}
+function snd(){const i=$('#ci');if(!i)return;const t=i.value.trim();if(!t)return;i.value='';const u=S.tm?.name||'You';const m={u,t,uid:MY,ts:Date.now()};CH.push(m);try{BC.postMessage(m)}catch(e){}if(db&&S.room)try{push(ref(db,'rooms/'+S.room+'/chat'),m)}catch(e){}cu();if(S.opp)setTimeout(()=>say(S.opp,R(['Nice try! 😎','Wait till my yorkers come 🎯','GG so far','You got lucky!','Sixes incoming 💥','Bring it on!'])),1000)}
 function bindChat(code){if(chatUnsub){try{chatUnsub()}catch(e){}chatUnsub=null}if(!db||!code)return;const r=ref(db,'rooms/'+code+'/chat');chatUnsub=onChildAdded(r,s=>{const v=s.val();if(!v||v.uid===MY)return;CH.push({u:v.u,t:v.t});cu()})}
 /* MENU */
 function menu(){S={};app(`<div class="card" style="text-align:center"><h1>🏏 CRICKET CLASH 2D</h1><div class="mu">Build a ₹160 Cr squad of 22 · design your jersey · win T10 thrillers</div></div>
@@ -95,7 +94,7 @@ function rm(i){S.tm.sq=S.tm.sq.filter(p=>p.id!=i);ul()}
 function auto(){const t=S.tm;while(t.sq.length<22){const l=160-t.sq.reduce((a,x)=>a+x.p,0),c=POOL.filter(p=>!t.sq.includes(p)&&ok(p)),g=c.filter(p=>p.p<=l/(22-t.sq.length)*1.4);const p=R(g.length?g:c.sort((a,b)=>a.p-b.p).slice(0,3));t.sq.push(p)}ul()}
 /* LINEUP */
 function lineup(cb){const t=S.tm;S.cb=cb;if(!t.xi){const bl=[...t.sq].sort((a,b)=>b.bowl-a.bowl),xi=[];let f=0;const ad=p=>{if(xi.length<11&&!xi.includes(p)&&(p.o!='F'||f<4)){xi.push(p);f+=p.o=='F'}};bl.slice(0,5).forEach(ad);[...t.sq].sort((a,b)=>b.bat-a.bat).forEach(ad);t.xi=xi.sort((a,b)=>b.bat-a.bat);t.bw=[...xi].sort((a,b)=>b.bowl-a.bowl).slice(0,5).map(p=>p.id);const s=[...xi].sort((a,b)=>Math.max(b.bat,b.bowl)-Math.max(a.bat,a.bowl));t.c=s[0].id;t.vc=s[1].id;t.wk=(xi.find(p=>p.t=='W')||xi[0]).id}lu()}
-function lu(){const t=S.tm;if(!t.xi.some(p=>p.id==t.wk))t.wk=(t.xi.find(p=>p.t=='W')||t.xi[0]||{}).id;if(t.bw.length==5){if(!t.ov||t.ov.some(id=>!t.bw.includes(id)))t.ov=Array.from({length:10},(_,i)=>t.bw[i%5])}else t.ov=null;const o=t.xi.map(p=>`<option value="${p.id}" `);app(`<h2>Batting Order, Bowling & Captains</h2><div class="g g2"><div class="card"><b>Playing XI (${t.xi.length}/11) — batting order</b>${t.xi.map((p,i)=>`<div class="pl"><span>${i+1}. ${p.n} ${tag(p)} ${p.id==t.c?'<b>(C)</b>':p.id==t.vc?'<b>(VC)</b>':''} ${p.id==t.wk?'🧤':''}</span><span class="r"><button onclick="mv(${i},-1)">▲</button><button onclick="mv(${i},1)">▼</button><button class="${t.bw.includes(p.id)?'p':''}" onclick="bwt(${p.id})">🎯${t.bw.includes(p.id)?t.bw.indexOf(p.id)+1:''}</button><button onclick="xo(${p.id})">✕</button></span></div>`).join('')}<div class="mu">🎯 = bowler (pick 5, tap order = over order, 2 overs each)</div></div>
+function lu(){const t=S.tm;if(!t.xi.some(p=>p.id==t.wk))t.wk=(t.xi.find(p=>p.t=='W')||t.xi[0]||{}).id;if(t.bw.length==5){if(!t.ov||t.ov.some(id=>!t.bw.includes(id)))t.ov=Array.from({length:10},(_,i)=>t.bw[i%5])}else t.ov=null;app(`<h2>Batting Order, Bowling & Captains</h2><div class="g g2"><div class="card"><b>Playing XI (${t.xi.length}/11) — batting order</b>${t.xi.map((p,i)=>`<div class="pl"><span>${i+1}. ${p.n} ${tag(p)} ${p.id==t.c?'<b>(C)</b>':p.id==t.vc?'<b>(VC)</b>':''} ${p.id==t.wk?'🧤':''}</span><span class="r"><button onclick="mv(${i},-1)">▲</button><button onclick="mv(${i},1)">▼</button><button class="${t.bw.includes(p.id)?'p':''}" onclick="bwt(${p.id})">🎯${t.bw.includes(p.id)?t.bw.indexOf(p.id)+1:''}</button><button onclick="xo(${p.id})">✕</button></span></div>`).join('')}<div class="mu">🎯 = bowler (pick 5, tap order = over order, 2 overs each)</div></div>
 <div class="card"><div class="r">Captain<select onchange="S.tm.c=+this.value;lu()">${t.xi.map(p=>`<option value="${p.id}" ${p.id==t.c?'selected':''}>${p.n}</option>`).join('')}</select></div><div class="r">Vice<select onchange="S.tm.vc=+this.value;lu()">${t.xi.map(p=>`<option value="${p.id}" ${p.id==t.vc?'selected':''}>${p.n}</option>`).join('')}</select></div><div class="r">🧤 Wicket-keeper<select onchange="S.tm.wk=+this.value;lu()">${t.xi.map(p=>`<option value="${p.id}" ${p.id==t.wk?'selected':''}>${p.n}${p.t=='W'?' 🧤':''}</option>`).join('')}</select></div><div class="mu">Specialist keepers give a small wicket-taking bonus; a non-keeper behind the stumps hurts your side.</div><b>Bench</b><div class="sc">${t.sq.filter(p=>!t.xi.includes(p)).map(p=>`<div class="pl" onclick="xa(${p.id})"><span>${p.n} ${tag(p)} <small class="mu">${p.bat}/${p.bowl}</small></span><b>+</b></div>`).join('')}</div></div></div><div class="card"><b>Bowling plan — who bowls each over</b> <span class="mu">(10-over template, auto-scaled to your match length; you can change the bowler before every over during the match)</span>${t.ov?[['⚡ Powerplay',0,3],['Middle overs',3,7],['🔥 Death overs',7,10]].map(([l,a,z])=>`<div style="margin-top:8px"><b>${l}</b> <span class="mu">(overs ${a+1}-${z})</span><div class="r">${t.ov.slice(a,z).map((id,k)=>`<span>Ov ${a+k+1} <select onchange="S.tm.ov[${a+k}]=+this.value;lu()">${t.bw.map(b=>`<option value="${b}" ${b==id?'selected':''}>${POOL[b].n}</option>`).join('')}</select></span>`).join('')}</div></div>`).join(''):'<div class="mu">Pick 5 bowlers (🎯) first</div>'}</div><div id="er" style="color:#e63946"></div>${sbtn()}<button class="p" onclick="ready()">Confirm & Play →</button>`)}
 const mv=(i,d)=>{const x=S.tm.xi,j=i+d;if(j<0||j>10||!x[j])return;[x[i],x[j]]=[x[j],x[i]];lu()};
 const bwt=id=>{const b=S.tm.bw;b.includes(id)?b.splice(b.indexOf(id),1):b.length<5&&b.push(id);lu()};
@@ -166,6 +165,7 @@ function tui(){const T=S.T,t=[...T.teams].sort((a,b)=>b.pts-a.pts||b.w-a.w);cons
 app(`<h2>🏆 Tournament ${S.on?'(Online)':''}</h2><div class="card"><table><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>Pts</th></tr>${t.map((x,i)=>`<tr ${x==T.H?'style="font-weight:800"':''}><td>${i+1}</td><td class="r">${jersey(x.j,x.j.num,'',26)}${x.name} <button onclick="tsq(${T.teams.indexOf(x)})">Squad</button></td><td>${x.w+x.l}</td><td>${x.w}</td><td>${x.l}</td><td>${x.pts}</td></tr>`).join('')}</table></div><div class="r"><button onclick="tstats()">📊 Stats</button>${sbtn()}${done?`<button class="p" onclick="tfin()">Play Final: ${t[0].name} vs ${t[1].name}</button>`:`<button class="p" onclick="tnext()">${nxt?'Play: vs '+(nxt[0]==T.H?nxt[1]:nxt[0]).name:'Finish league'}</button><button onclick="editXI()">Edit XI / Bowling</button>`}</div>`)}
 async function tnext(){const T=S.T;while(T.i<T.fix.length){const[a,b]=T.fix[T.i++];if(a==T.H||b==T.H){S.opp=(a==T.H?b:a).name;const r=await match(a,b,T.H);S.res=tui;return rscreen(r,T.H,'S.res')}await match(a,b,null)}tui()}
 async function tfin(){const T=S.T,t=[...T.teams].sort((a,b)=>b.pts-a.pts||b.w-a.w),[a,b]=t,h=a==T.H||b==T.H,r=await match(a,b,h?T.H:null),ch=r.w;S.res=menu;app(`<div class="card" style="text-align:center"><div class="big">🏆 CHAMPIONS</div>${jersey(ch.j,ch.j.num,ch.name,200)}<h2>${ch.name}</h2><p>${r.tx}</p><p>${ch==T.H?'You lifted the trophy! 🎉':'Better luck next season.'}</p>${tmvp()}<button class="p" onclick="menu()">Main menu</button></div>`)}
+
 Object.assign(window,{tc,snd,menu,go,pre,jv,pick,ul,add,rm,auto,lineup,lu,mv,bwt,xo,xa,ready,tstats,tsq,saveG,loadG,editXI,tstart,tui,tnext,tfin,stUI});
 if($('#ci'))$('#ci').onkeydown=e=>e.key=='Enter'&&snd();
 try{menu()}catch(e){console.error(e);if($('#app'))$('#app').innerHTML='<div class="card"><b>Startup error:</b> '+e.message+'</div>'}
